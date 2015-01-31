@@ -7,6 +7,7 @@
 //
 
 #import "XMLParser.h"
+#import "XMLImageParser.h"
 
 @implementation XMLParser
 
@@ -24,6 +25,7 @@
     objectParser = [[XMLObjectParser alloc] init];
     objectParser.allowAttrsOverwrite = YES;
     objectParser.xmlParser = xmlParser;
+    [objectParser addParser:[XMLImageParser class] forTagName:@"Image"];
     [objectParser startOnElement:elementName namespaceURI:namespaceURI qualifiedName:qName attributes:attributeDict];
 }
 

@@ -95,7 +95,8 @@
     return self;
 }
 
-- (id)init {
+- (id)init
+{
     self = [super init];
     if(self)
     {
@@ -110,12 +111,27 @@
     return self;
 }
 
--(id)clone {
+-(id)clone
+{
     XMLObjectParser *parser = [[self.class alloc] initWithTagName:self.tagName];
     return parser;
 }
 
-- (void)setXmlParser:(NSXMLParser *)xmlParser {
+-(void)reset
+{
+    if(_finished)
+    {
+        [self reuseXMLObject:_rootElement];
+        [self cacheParser:childParser];
+        [self resetValueHolders];
+        childParser = nil;
+        _rootElement = nil;
+        _finished = NO;
+    }
+}
+
+- (void)setXmlParser:(NSXMLParser *)xmlParser
+{
     if(_xmlParser && (_xmlParser.delegate == self))
     {
         [_xmlParser setDelegate:nil];
@@ -168,10 +184,11 @@
 
 - (void)parser:(NSXMLParser *)parser readElementName:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qName:(NSString *)qName attributeDict:(NSDictionary *)attributeDict
 {
-    Class elementParserClass = (childParsers) ? [childParsers objectForKey:elementName] : nil;
-    if(elementParserClass)
+    
+    childParser = [self parserForTag:elementName];
+    if(childParser)
     {
-        childParser = [[elementParserClass alloc] initWithTagName:elementName];
+        [childParser reset];
         childParser.delegate = self;
         childParser.xmlParser = self.xmlParser;
         [childParser parser:parser
@@ -239,8 +256,8 @@
     
     if(!currentValue)
     {
-        currentValue = [NSMutableString stringWithString:string];
-    };
+        currentValue = [NSMutableString string];
+    }
     
     [currentValue appendString:string];
 }
@@ -255,7 +272,7 @@
     if(!currentCData)
     {
         currentCData = [NSMutableData data];
-    };
+    }
     
     [currentCData appendData:CDATABlock];
 }
@@ -282,7 +299,11 @@
     {
         if(self.trimPropertyValues)
         {
-            elementValue = [currentValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *trimmedValue = [currentValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if([trimmedValue length])
+            {
+                elementValue = trimmedValue;
+            }
         } else
         {
             elementValue = [NSString stringWithString:currentValue];
@@ -332,12 +353,12 @@
             
             if(isSimple)
             {
-                [self parentElement:parentElement setObject:elementValue forKey:key];
+                [self element:parentElement setObject:elementValue forKey:key];
                 [self reuseXMLObject:currentElement];
                 elementValue = nil;
             } else
             {
-                [self parentElement:parentElement setObject:currentElement forKey:key];
+                [self element:parentElement setObject:currentElement forKey:key];
             }
         }
     }
@@ -362,15 +383,38 @@
     }
 }
 
+#pragma mark - Delegate conformance
+
+- (void)soapObjectParser:(XMLObjectParser *)parser didFinishWithObject:(XMLObject *)object {
+    
+    NSObject *tagValue = childParser.modelObject;
+    if(tagValue)
+    {
+        [self element:currentElement setObject:tagValue forKey:parser.tagName];
+    }
+    
+    [self cacheParser:parser];
+    
+    NSXMLParser *xmlParser = parser.xmlParser;
+    
+    childParser.delegate = nil;
+    childParser.xmlParser = nil;
+    childParser = nil;
+    
+    self.xmlParser = xmlParser;
+}
+
+#pragma mark - Private methods
+
 -(XMLObject*) lastParentElement
 {
     return [openElements lastObject];
 }
 
--(void) parentElement:(XMLObject*) parentElement setObject:(NSObject*) object forKey:(NSString*) key
+-(void) element:(XMLObject*) element setObject:(NSObject*) object forKey:(NSString*) key
 {
-    NSObject *keyValue = currentElement;
-    NSObject *value = [parentElement.properties objectForKey:key];
+    NSObject *keyValue = object;
+    NSObject *value = [element.properties objectForKey:key];
     if(value)
     {
         NSMutableArray *items = nil;
@@ -387,12 +431,23 @@
         
         if(items)
         {
-            [items addObject:currentElement];
+            [items addObject:object];
             keyValue = items;
         }
     }
     
-    [parentElement.properties setObject:keyValue forKey:key];
+    [element.properties setObject:keyValue forKey:key];
+}
+
+-(void) simplifyXMLObject:(XMLObject*) object
+{
+    if(!object)
+    {
+        return;
+    }
+    
+    // try to extract array :?
+    
 }
 
 -(NSString*) buildElementXPath
@@ -456,39 +511,53 @@
 
 -(void) reuseXMLObject:(XMLObject*)xmlObject
 {
+    if(!xmlObject)
+    {
+        return;
+    }
+    
     if(!elementCacheSet)
     {
         elementCacheSet = [NSMutableArray array];
     }
+    
     [elementCacheSet addObject:xmlObject];
 }
 
--(void)reset {
-    if(_finished)
+-(XMLObjectParser*) parserForTag:(NSString*) tagName
+{
+    XMLObjectParser *parser = nil;
+    
+    if(parserCacheSet)
     {
-        [self resetValueHolders];
-        _rootElement = nil;
-        _finished = NO;
+        parser = [parserCacheSet objectForKey:tagName];
     }
+    
+    if(!parser)
+    {
+        Class elementParserClass = (childParsers) ? [childParsers objectForKey:tagName] : nil;
+        if(elementParserClass)
+        {
+            parser = [[elementParserClass alloc] initWithTagName:tagName];
+        }
+    }
+    
+    return parser;
 }
 
-#pragma mark - Delegate conformance
-
-- (void)soapObjectParser:(XMLObjectParser *)parser didFinishWithObject:(XMLObject *)object {
-    
-    NSObject *tagValue = childParser.modelObject;
-    if(tagValue)
+-(void) cacheParser:(XMLObjectParser*) parser
+{
+    if(!parser)
     {
-        [currentElement.properties setObject:tagValue forKey:parser.tagName];
+        return;
     }
     
-    NSXMLParser *xmlParser = parser.xmlParser;
+    if(!parserCacheSet)
+    {
+        parserCacheSet = [NSMutableDictionary dictionary];
+    }
     
-    childParser.delegate = nil;
-    childParser.xmlParser = nil;
-    childParser = nil;
-    
-    self.xmlParser = xmlParser;
+    [parserCacheSet setObject:parser forKey:parser.tagName];
 }
 
 - (void)dealloc {

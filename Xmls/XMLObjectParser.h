@@ -36,6 +36,8 @@
 
 @interface XMLObjectParser : NSObject {
     NSMutableArray *elementCacheSet;
+    NSMutableDictionary *parserCacheSet;
+    
     XMLObject *currentElement;
     NSMutableArray *openElements;
     NSMutableString *currentValue;
