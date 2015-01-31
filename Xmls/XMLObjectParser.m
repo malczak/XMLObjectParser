@@ -69,8 +69,10 @@
 
 
 #pragma mark - SoapObjectParser implementation
+static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
-@interface XMLObjectParser(Delegates) <NSXMLParserDelegate, SoapObjectParserDelegate>
+@interface XMLObjectParser() <NSXMLParserDelegate, SoapObjectParserDelegate>
+
 @end;
 
 @implementation XMLObjectParser
@@ -497,15 +499,14 @@
 
 -(XMLObject*) newXMLObject
 {
-    XMLObject *object = nil;
-    if(elementCacheSet && [elementCacheSet count])
-    {
-        object = [elementCacheSet lastObject];
-        [elementCacheSet removeLastObject];
-    } else
+    XMLParserCache *cache = [self cacheInstance];
+    XMLObject *object = (XMLObject*)[cache popObjectForKey:OBJECT_CACHE_KEY];
+
+    if(!object)
     {
         object = [[XMLObject alloc] init];
     }
+    
     return object;
 }
 
@@ -516,22 +517,13 @@
         return;
     }
     
-    if(!elementCacheSet)
-    {
-        elementCacheSet = [NSMutableArray array];
-    }
-    
-    [elementCacheSet addObject:xmlObject];
+    [[self cacheInstance] pushObject:xmlObject forKey:OBJECT_CACHE_KEY];
 }
 
 -(XMLObjectParser*) parserForTag:(NSString*) tagName
 {
-    XMLObjectParser *parser = nil;
-    
-    if(parserCacheSet)
-    {
-        parser = [parserCacheSet objectForKey:tagName];
-    }
+    XMLParserCache *cache = [self cacheInstance];
+    XMLObjectParser *parser = (XMLObjectParser*)[cache popObjectForKey:tagName];
     
     if(!parser)
     {
@@ -541,6 +533,8 @@
             parser = [[elementParserClass alloc] initWithTagName:tagName];
         }
     }
+    
+    parser.cache = cache;
     
     return parser;
 }
@@ -552,17 +546,26 @@
         return;
     }
     
-    if(!parserCacheSet)
-    {
-        parserCacheSet = [NSMutableDictionary dictionary];
-    }
+    parser.cache = nil;
     
-    [parserCacheSet setObject:parser forKey:parser.tagName];
+    [[self cacheInstance] pushObject:parser forKey:parser.tagName];
+}
+
+-(XMLParserCache*) cacheInstance
+{
+    if(!self.cache)
+    {
+        self.cache = [XMLParserCache cache];
+    }
+    return self.cache;
 }
 
 - (void)dealloc {
     self.delegate = nil;
     self.xmlParser = nil;
+    
+    self.cache = nil;
+    
     _tagName = nil;
     _rootElement = nil;
     childParser = nil;

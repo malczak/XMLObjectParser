@@ -4,7 +4,7 @@
 //
 
 #import <Foundation/Foundation.h>
-
+#import "XMLParserCache.h"
 
 @class XMLObjectParser;
 @class XMLObject;
@@ -34,10 +34,7 @@
 
 #pragma mark - SoapObjectParser implementation
 
-@interface XMLObjectParser : NSObject {
-    NSMutableArray *elementCacheSet;
-    NSMutableDictionary *parserCacheSet;
-    
+@interface XMLObjectParser : NSObject {    
     XMLObject *currentElement;
     NSMutableArray *openElements;
     NSMutableString *currentValue;
@@ -58,6 +55,10 @@
 @property (nonatomic, assign) BOOL trimPropertyValues;
 // @default NO
 @property (nonatomic, assign) BOOL allowAttrsOverwrite;
+
+
+@property (nonatomic, strong) XMLParserCache* cache;
+
 
 @property (nonatomic, strong) id<SoapObjectParserDelegate> delegate;
 @property (nonatomic, strong) NSXMLParser *xmlParser;
