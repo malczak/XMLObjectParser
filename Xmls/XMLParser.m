@@ -7,7 +7,9 @@
 //
 
 #import "XMLParser.h"
+#import "XMLParserConfig.h"
 #import "XMLImageParser.h"
+#import "XMLImageContainerParser.h"
 
 @implementation XMLParser
 
@@ -22,10 +24,14 @@
 
 -(void)parser:(NSXMLParser *)parser didStartElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName attributes:(NSDictionary *)attributeDict
 {
+    XMLParserConfig *config = [XMLParserConfig config];
+    config.allowAttrsOverwrite = YES;
+    [config addParser:[XMLImageParser class] forTagName:@"Image"];
+    [config addParser:[XMLImageContainerParser class] forTagName:@"ImageContainer"];
+    
     objectParser = [[XMLObjectParser alloc] init];
-    objectParser.allowAttrsOverwrite = YES;
+    objectParser.config = config;
     objectParser.xmlParser = xmlParser;
-    [objectParser addParser:[XMLImageParser class] forTagName:@"Image"];
     [objectParser startOnElement:elementName namespaceURI:namespaceURI qualifiedName:qName attributes:attributeDict];
 }
 

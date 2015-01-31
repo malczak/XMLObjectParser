@@ -5,70 +5,8 @@
 
 #import "XMLObjectParser.h"
 
-#pragma mark - SoapObject implemenatation
+#pragma mark - XMLObjectParser implementation
 
-@implementation XMLObject
-
-- (id)init {
-    self = [super init];
-    if (self) {
-        self.simple = YES;
-        self.properties = [NSMutableDictionary dictionary];
-    }
-    return self;
-}
-
-- (NSObject*)valueForPath:(NSString*)keyPath {
-    NSArray *path = [keyPath componentsSeparatedByString:@"."];
-    
-    if(![path count])
-    {
-        return nil;
-    }
-    
-    Class soapObjectClass = [XMLObject class];
-    
-    NSUInteger propertyIdx = 0;
-    XMLObject *object = self;
-    
-    while((propertyIdx < [path count])&&([object isKindOfClass:soapObjectClass]))
-    {
-        NSString *property = [path objectAtIndex:propertyIdx];
-        propertyIdx += 1;
-        object = [object.properties objectForKey:property];
-    }
-    
-    return object;
-}
-
-- (void)enumerateProperty:(NSString*)propertyName withBlock:(void (^)(id value, NSUInteger index, BOOL *stop))block
-{
-    id propertyObject = [self valueForPath:propertyName];
-    if([propertyObject isKindOfClass:[NSArray class]])
-    {
-        NSArray *objects = (NSArray*) propertyObject;
-        [objects enumerateObjectsUsingBlock:block];
-    } else {
-        BOOL stop;
-        block(propertyObject, 0, &stop);
-    }
-}
-
-- (NSString *)description {
-    NSMutableString *description = [NSMutableString stringWithFormat:@"<%@[%@]:\n", NSStringFromClass([self class]),self.elementName];
-    [description appendString:@"\nproperties: "];
-    if(self.properties) {
-        [description appendString:self.properties.description];
-    }
-    [description appendString:@">"];
-    return description;
-}
-
-
-@end
-
-
-#pragma mark - SoapObjectParser implementation
 static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 @interface XMLObjectParser() <NSXMLParserDelegate, SoapObjectParserDelegate>
@@ -89,12 +27,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 -(id)initWithTagName:(NSString*)parserTagName childParsers:(NSMutableDictionary *)parsers
 {
-    self = [self initWithTagName:parserTagName];
-    if(self)
-    {
-        childParsers = parsers;
-    }
-    return self;
+    return [self initWithTagName:parserTagName];
 }
 
 - (id)init
@@ -104,11 +37,6 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     {
         _finished = NO;
         openElements = [NSMutableArray array];
-        
-        self.forceLowerCasePropertyNames = YES;
-        self.treatCDataAsStrings = YES;
-        self.trimPropertyValues = YES;
-        self.allowAttrsOverwrite = NO;
     }
     return self;
 }
@@ -147,33 +75,6 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     }
 }
 
--(void)addParser:(Class)parserClass forTagName:(NSString*) tagName
-{
-    if(!childParsers)
-    {
-        childParsers = [NSMutableDictionary dictionary];
-    }
-    [childParsers setObject:parserClass forKey:tagName];
-}
-
--(void)ignoreTagName:(NSString*) tagName
-{
-    if(!ignoredTagNames)
-    {
-        ignoredTagNames = [NSMutableSet set];
-    }
-    [ignoredTagNames addObject:tagName];
-}
-
--(void)includeTagName:(NSString*) tagName
-{
-    if(!includeTagNames)
-    {
-        includeTagNames = [NSMutableSet set];
-    }
-    [includeTagNames addObject:tagName];
-}
-
 -(id)modelObject
 {
     return [self rootElement];
@@ -186,19 +87,20 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 - (void)parser:(NSXMLParser *)parser readElementName:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qName:(NSString *)qName attributeDict:(NSDictionary *)attributeDict
 {
-    
-    childParser = [self parserForTag:elementName];
-    if(childParser)
+    if(![self.tagName isEqualToString:elementName])
     {
-        [childParser reset];
-        childParser.delegate = self;
-        childParser.xmlParser = self.xmlParser;
-        [childParser parser:parser
-            didStartElement:elementName
-               namespaceURI:namespaceURI
-              qualifiedName:qName
-                 attributes:attributeDict];
-        return;
+        childParser = [self parserForTag:elementName];
+        if(childParser)
+        {
+            childParser.delegate = self;
+            childParser.xmlParser = self.xmlParser;
+            [childParser parser:parser
+                didStartElement:elementName
+                   namespaceURI:namespaceURI
+                  qualifiedName:qName
+                     attributes:attributeDict];
+            return;
+        }
     }
     
     if(currentElement)
@@ -234,16 +136,9 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         return;
     }
     
-    if(includeTagNames && ![includeTagNames member:elementName])
+    if([[self config] shouldIgnoreTagName:elementName])
     {
         ignoringTagName = elementName;
-        return;
-    }
-    
-    if(ignoredTagNames && [ignoredTagNames member:elementName])
-    {
-        ignoringTagName = elementName;
-        return;
     }
     
     [self parser:parser readElementName:elementName namespaceURI:namespaceURI qName:qName attributeDict:attributeDict];
@@ -296,10 +191,11 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     }
     
     // build element value based on content characters or CData
+    XMLParserConfig *config = [self configInstance];
     NSObject *elementValue = nil;
     if([self hasValue])
     {
-        if(self.trimPropertyValues)
+        if(config.trimPropertyValues)
         {
             NSString *trimmedValue = [currentValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if([trimmedValue length])
@@ -314,7 +210,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     
     if([self hasCDATAValue])
     {
-        if(self.treatCDataAsStrings)
+        if(config.treatCDataAsStrings)
         {
             NSString *CDataStr = [[NSString alloc] initWithData:currentCData encoding:NSUTF8StringEncoding];
             if(elementValue)
@@ -346,13 +242,6 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         NSString *key = [currentElement elementName];
         if(key)
         {
-            if(self.forceLowerCasePropertyNames)
-            {
-                NSString *firstChar = [key substringToIndex:1];
-                NSString *keyTail = [key substringFromIndex:1];
-                key = [[firstChar lowercaseString] stringByAppendingString:keyTail];
-            }
-            
             if(isSimple)
             {
                 [self element:parentElement setObject:elementValue forKey:key];
@@ -415,6 +304,14 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 -(void) element:(XMLObject*) element setObject:(NSObject*) object forKey:(NSString*) key
 {
+    XMLParserConfig *config = [self configInstance];
+    if(config.forceLowerCasePropertyNames)
+    {
+        NSString *firstChar = [key substringToIndex:1];
+        NSString *keyTail = [key substringFromIndex:1];
+        key = [[firstChar lowercaseString] stringByAppendingString:keyTail];
+    }
+
     NSObject *keyValue = object;
     NSObject *value = [element.properties objectForKey:key];
     if(value)
@@ -422,7 +319,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         NSMutableArray *items = nil;
         if(![value isKindOfClass:[NSMutableArray class]])
         {
-            if(!self.allowAttrsOverwrite || ([value class] == [object class]))
+            if(!config.allowAttrsOverwrite || ([value class] == [object class]))
             {
                 items = [NSMutableArray arrayWithObject:value];
             }
@@ -499,7 +396,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 -(XMLObject*) newXMLObject
 {
-    XMLParserCache *cache = [self cacheInstance];
+    XMLParserCache *cache = [[self configInstance] cache];
     XMLObject *object = (XMLObject*)[cache popObjectForKey:OBJECT_CACHE_KEY];
 
     if(!object)
@@ -517,24 +414,28 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         return;
     }
     
-    [[self cacheInstance] pushObject:xmlObject forKey:OBJECT_CACHE_KEY];
+    [[[self configInstance] cache] pushObject:xmlObject forKey:OBJECT_CACHE_KEY];
 }
 
 -(XMLObjectParser*) parserForTag:(NSString*) tagName
 {
-    XMLParserCache *cache = [self cacheInstance];
-    XMLObjectParser *parser = (XMLObjectParser*)[cache popObjectForKey:tagName];
+    XMLParserConfig *config = [self configInstance];
+    XMLObjectParser *parser = (XMLObjectParser*)[config.cache popObjectForKey:tagName];
     
     if(!parser)
     {
-        Class elementParserClass = (childParsers) ? [childParsers objectForKey:tagName] : nil;
-        if(elementParserClass)
+        Class parserClass = [config parserClassForTagName:tagName];
+        if(parserClass)
         {
-            parser = [[elementParserClass alloc] initWithTagName:tagName];
+            parser = [[parserClass alloc] initWithTagName:tagName];
         }
     }
     
-    parser.cache = cache;
+    if(parser)
+    {
+        parser.config = [self configInstance];
+        [parser reset];
+    }
     
     return parser;
 }
@@ -546,31 +447,30 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         return;
     }
     
-    parser.cache = nil;
+    parser.config = nil;
     
-    [[self cacheInstance] pushObject:parser forKey:parser.tagName];
+    [[[self configInstance] cache] pushObject:parser forKey:parser.tagName];
 }
 
--(XMLParserCache*) cacheInstance
+-(XMLParserConfig*) configInstance
 {
-    if(!self.cache)
+    if(!self.config)
     {
-        self.cache = [XMLParserCache cache];
+        self.config = [XMLParserConfig defaultConfig];
     }
-    return self.cache;
+    return self.config;
 }
 
 - (void)dealloc {
     self.delegate = nil;
     self.xmlParser = nil;
     
-    self.cache = nil;
+    self.config = nil;
     
     _tagName = nil;
     _rootElement = nil;
     childParser = nil;
     currentElement = nil;
-    childParsers = nil;
 }
 
 

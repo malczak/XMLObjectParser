@@ -37,7 +37,7 @@
     {
         [cache enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSMutableArray *keyCache, BOOL *stop){
             [keyCache removeAllObjects];
-        }];        
+        }];
     }
 }
 
