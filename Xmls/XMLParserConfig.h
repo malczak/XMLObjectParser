@@ -41,6 +41,6 @@
 
 -(void)addParser:(Class)parserClass forTagName:(NSString*) tagName;
 
--(Class) parserClassForTagName:(NSString*) tagName;
+-(Class)parserClassForTagName:(NSString*) tagName;
 
 @end

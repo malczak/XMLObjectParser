@@ -586,6 +586,10 @@ static NSString *const XMLOBJECT_CACHE_KEY = @"_object_cache_key";
     {
         self.config = [XMLParserConfig defaultConfig];
     }
+    if(!self.config.cache)
+    {
+        self.config.cache = [XMLParserCache cache];
+    }
     return self.config;
 }
 
