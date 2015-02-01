@@ -29,9 +29,9 @@
 
 @property (nonatomic, strong) XMLParserCache* cache;
 
-+(id) config;
++ (instancetype) config;
 
-+(id) defaultConfig;
++ (instancetype) defaultConfig;
 
 -(void)ignoreTagName:(NSString*) tagName;
 

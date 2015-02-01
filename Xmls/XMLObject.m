@@ -14,7 +14,7 @@ NSString *const XMLOBJECT_NS_KEY = @"_xmlobject_ns_";
 
 @implementation XMLObject
 
-- (id)init {
+- (instancetype)init {
     self = [super init];
     if (self) {
         self.properties = [NSMutableDictionary dictionary];

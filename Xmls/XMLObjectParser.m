@@ -15,7 +15,7 @@ static NSString *const XMLOBJECT_CACHE_KEY = @"_object_cache_key";
 
 @implementation XMLObjectParser
 
--(id)initWithTagName:(NSString*)parserTagName
+- (instancetype)initWithTagName:(NSString*)parserTagName
 {
     self = [self init];
     if(self)
@@ -25,12 +25,12 @@ static NSString *const XMLOBJECT_CACHE_KEY = @"_object_cache_key";
     return self;
 }
 
--(id)initWithTagName:(NSString*)parserTagName childParsers:(NSMutableDictionary *)parsers
+- (instancetype)initWithTagName:(NSString*)parserTagName childParsers:(NSMutableDictionary *)parsers
 {
     return [self initWithTagName:parserTagName];
 }
 
-- (id)init
+- (instancetype)init
 {
     self = [super init];
     if(self)
@@ -41,7 +41,7 @@ static NSString *const XMLOBJECT_CACHE_KEY = @"_object_cache_key";
     return self;
 }
 
--(id)clone
+-(instancetype)clone
 {
     XMLObjectParser *parser = [[self.class alloc] initWithTagName:self.tagName];
     return parser;

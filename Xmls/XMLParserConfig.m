@@ -10,19 +10,19 @@
 
 @implementation XMLParserConfig
 
-+(id) config
++ (instancetype) config
 {
-    return [[XMLParserConfig alloc] init];
+    return [[self alloc] init];
 }
 
-+(id) defaultConfig
++ (instancetype) defaultConfig
 {
-    XMLParserConfig *config = [[XMLParserConfig alloc] init];
+    XMLParserConfig *config = [[self alloc] init];
     config.cache = [XMLParserCache cache];
     return config;
 }
 
--(id) init
+- (instancetype) init
 {
     self = [super init];
     if(self)
