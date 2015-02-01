@@ -10,9 +10,9 @@
 
 @interface XMLParserCache : NSObject
 
-+(id) cache;
++ (instancetype) cache;
 
--(id) init;
+- (instancetype) init;
 
 -(void) flush;
 

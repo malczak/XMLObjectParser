@@ -16,12 +16,12 @@
 
 @implementation XMLParserCache
 
-+(id) cache
++ (instancetype) cache
 {
-    return [[XMLParserCache alloc] init];
+    return [[self alloc] init];
 }
 
--(id) init
+- (instancetype) init
 {
     self = [super init];
     if(self)

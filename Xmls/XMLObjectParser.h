@@ -35,7 +35,7 @@
 
 @property (nonatomic, readonly) BOOL finished;
 @property (nonatomic, readonly) NSString *tagName;
-@property (nonatomic, readonly) NSObject *rootElement;
+@property (nonatomic, readonly) XMLObject *rootElement;
 
 -(id)initWithTagName:(NSString*)parserTagName;
 -(id)initWithTagName:(NSString*)parserTagName childParsers:(NSMutableDictionary *)parsers;
