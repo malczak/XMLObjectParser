@@ -8,12 +8,15 @@
 
 #import "XMLObject.h"
 
+NSString *const XMLOBJECT_VALUE_KEY = @"_xmlobject_value_";
+
+NSString *const XMLOBJECT_NS_KEY = @"_xmlobject_ns_";
+
 @implementation XMLObject
 
 - (id)init {
     self = [super init];
     if (self) {
-        self.simple = YES;
         self.properties = [NSMutableDictionary dictionary];
     }
     return self;

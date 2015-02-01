@@ -24,6 +24,8 @@
 @property (nonatomic, assign) BOOL trimPropertyValues;
 // @default NO
 @property (nonatomic, assign) BOOL allowAttrsOverwrite;
+// @default YES
+@property (nonatomic, assign) BOOL extractArraysIfPossible;
 
 @property (nonatomic, strong) XMLParserCache* cache;
 

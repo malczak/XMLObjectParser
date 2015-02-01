@@ -7,7 +7,7 @@
 
 #pragma mark - XMLObjectParser implementation
 
-static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
+static NSString *const XMLOBJECT_CACHE_KEY = @"_object_cache_key";
 
 @interface XMLObjectParser() <NSXMLParserDelegate, SoapObjectParserDelegate>
 
@@ -105,20 +105,35 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     
     if(currentElement)
     {
-        currentElement.simple = NO;
         [openElements addObject:currentElement];
     }
     
     currentElement = [self newXMLObject];
     currentElement.elementName = elementName;
     
-    if(_rootElement ==nil)
+    if(!_rootElement)
     {
         _rootElement = currentElement;
-        [openElements addObject:_rootElement];
-    };
+    }
     
-    [currentElement.properties addEntriesFromDictionary:attributeDict];
+    XMLParserConfig *config = [self configInstance];
+    
+    if(attributeDict && [attributeDict count])
+    {
+        currentElement.flags = (currentElement.flags | XMLOBJECT_HAS_ATTRS);
+        [currentElement.properties addEntriesFromDictionary:attributeDict];
+    } else
+    if(config.extractArraysIfPossible)
+    {
+        [currentElement.properties setObject:[NSMutableArray array] forKey:XMLOBJECT_VALUE_KEY];
+    }
+    
+    if(namespaceURI && [namespaceURI length])
+    {
+        currentElement.flags = (currentElement.flags | XMLOBJECT_HAS_NS);
+        [currentElement.properties setObject:namespaceURI forKey:XMLOBJECT_NS_KEY];
+    }
+    
     currentValue = nil;
 }
 
@@ -246,6 +261,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
             {
                 [self element:parentElement setObject:elementValue forKey:key];
                 [self reuseXMLObject:currentElement];
+                currentElement = nil;
                 elementValue = nil;
             } else
             {
@@ -254,14 +270,19 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         }
     }
     
-    // if not consumed - set element value
-    if(elementValue)
+    if(currentElement)
     {
-        [currentElement.properties setObject:elementValue forKey:@"value"];
+        // if not consumed - set element value
+        if(elementValue)
+        {
+            [currentElement.properties setObject:elementValue forKey:XMLOBJECT_VALUE_KEY];
+        }
+        
+        // build xpath
+        currentElement.xpath = [self buildElementXPath];
+        
+        [self simplifyXMLObject:currentElement];
     }
-    
-    // build xpath
-    currentElement.xpath = [self buildElementXPath];
     
     currentElement = parentElement;
     [openElements removeObject:parentElement];
@@ -276,12 +297,19 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 
 #pragma mark - Delegate conformance
 
-- (void)soapObjectParser:(XMLObjectParser *)parser didFinishWithObject:(XMLObject *)object {
+- (void)soapObjectParser:(XMLObjectParser *)parser didFinishWithObject:(XMLObject *)object
+{
     
     NSObject *tagValue = childParser.modelObject;
     if(tagValue)
     {
-        [self element:currentElement setObject:tagValue forKey:parser.tagName];
+        if(!_rootElement)
+        {
+            _rootElement = currentElement;
+        } else
+        {
+            [self element:currentElement setObject:tagValue forKey:parser.tagName];   
+        }
     }
     
     [self cacheParser:parser];
@@ -311,9 +339,16 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         NSString *keyTail = [key substringFromIndex:1];
         key = [[firstChar lowercaseString] stringByAppendingString:keyTail];
     }
-
+    
     NSObject *keyValue = object;
+
+    if(config.extractArraysIfPossible && !(element.flags & XMLOBJECT_HAS_ATTRS))
+    {
+        key = XMLOBJECT_VALUE_KEY;
+    }
+
     NSObject *value = [element.properties objectForKey:key];
+
     if(value)
     {
         NSMutableArray *items = nil;
@@ -345,7 +380,92 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
         return;
     }
     
-    // try to extract array :?
+    if(![object isKindOfClass:[XMLObject class]])
+    {
+        return;
+    }
+    
+    XMLParserConfig *config = [self configInstance];
+    
+    /*
+     1) if parent has no attrs -> make parent an array
+     eq.
+     
+     <images>
+     <resource rid="93" uri="image_241188" type="2569" id="241188" source="desktop" folder="" width="3456" height="4608"/>
+     <resource rid="113" uri="image_241202" type="2569" id="241202" source="desktop" folder="" width="4608" height="3456"/>
+     <resource rid="119" uri="image_241207" type="2569" id="241207" source="desktop" folder="" width="2592" height="1944"/>
+     </images>
+     
+     into
+     
+     images : <NSArray>[
+        XMLObject(resource),
+        XMLObject(resource),
+        XMLObject(resource)
+     ]
+     
+     instead of
+     
+     images : <NSObject>{
+        "resource" : <NSArray>[
+            XMLObject(resource),
+            XMLObject(resource),
+            XMLObject(resource)
+            ]
+     }
+     
+     
+     
+     2) if parent has attr -> make parent an object
+     eq.
+     
+     <images id="image_1" name="image_name">
+     <resource rid="93" uri="image_241188" type="2569" id="241188" source="desktop" folder="" width="3456" height="4608"/>
+     <resource rid="113" uri="image_241202" type="2569" id="241202" source="desktop" folder="" width="4608" height="3456"/>
+     <resource rid="119" uri="image_241207" type="2569" id="241207" source="desktop" folder="" width="2592" height="1944"/>
+     </images>
+     
+     into
+     
+     images : <NSObject>{
+        "id" : "image_1",
+        "name" : "image_name",
+        "resource" : <NSArray>[
+            XMLObject(resource),
+            XMLObject(resource),
+            XMLObject(resource)
+            ]
+     }
+     
+     
+     */
+    if(config.extractArraysIfPossible)
+    {
+        if(!(object.flags & XMLOBJECT_HAS_ATTRS) && [object.properties count] == 1)
+        {
+            NSString *key =[[object.properties allKeys] firstObject];
+            NSObject *keyObject = [object.properties objectForKey:key];
+            if([keyObject isKindOfClass:[NSArray class]])
+            {
+                XMLObject *parent = [self lastParentElement];
+                __block NSString *objectKey = nil;
+                [parent.properties enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSObject *item, BOOL *stop){
+                    if(item == object)
+                    {
+                        objectKey = key;
+                        *stop = YES;
+                    }
+                }];
+                if(objectKey)
+                {
+                    [parent.properties setObject:keyObject forKey:objectKey];
+                    [object.properties removeAllObjects];
+                    [self reuseXMLObject:object];
+                }
+            }
+        }
+    }
     
 }
 
@@ -397,7 +517,7 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
 -(XMLObject*) newXMLObject
 {
     XMLParserCache *cache = [[self configInstance] cache];
-    XMLObject *object = (XMLObject*)[cache popObjectForKey:OBJECT_CACHE_KEY];
+    XMLObject *object = (XMLObject*)[cache popObjectForKey:XMLOBJECT_CACHE_KEY];
 
     if(!object)
     {
@@ -407,14 +527,22 @@ static NSString *OBJECT_CACHE_KEY = @"_object_cache_key";
     return object;
 }
 
--(void) reuseXMLObject:(XMLObject*)xmlObject
+-(void) reuseXMLObject:(NSObject*)xmlObject
 {
     if(!xmlObject)
     {
         return;
     }
     
-    [[[self configInstance] cache] pushObject:xmlObject forKey:OBJECT_CACHE_KEY];
+    if(![xmlObject isKindOfClass:[XMLObject class]])
+    {
+        return;
+    }
+    
+    XMLObject *castedObject = (XMLObject*) xmlObject;
+    castedObject.flags = 0;
+    [castedObject.properties removeAllObjects];
+    [[[self configInstance] cache] pushObject:castedObject forKey:XMLOBJECT_CACHE_KEY];
 }
 
 -(XMLObjectParser*) parserForTag:(NSString*) tagName

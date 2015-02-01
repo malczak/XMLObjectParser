@@ -31,6 +31,7 @@
         self.treatCDataAsStrings = YES;
         self.trimPropertyValues = YES;
         self.allowAttrsOverwrite = NO;
+        self.extractArraysIfPossible = YES;
     }
     return self;
 }

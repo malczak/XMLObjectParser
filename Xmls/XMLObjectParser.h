@@ -12,7 +12,7 @@
 #pragma mark - SoapObjectParserDelegate protocol
 
 @protocol SoapObjectParserDelegate
--(void)soapObjectParser:(XMLObjectParser*)parser didFinishWithObject:(XMLObject *)object;
+-(void)soapObjectParser:(XMLObjectParser*)parser didFinishWithObject:(NSObject *)object;
 @end
 
 #pragma mark - SoapObjectParser implementation
@@ -35,7 +35,7 @@
 
 @property (nonatomic, readonly) BOOL finished;
 @property (nonatomic, readonly) NSString *tagName;
-@property (nonatomic, readonly) XMLObject *rootElement;
+@property (nonatomic, readonly) NSObject *rootElement;
 
 -(id)initWithTagName:(NSString*)parserTagName;
 -(id)initWithTagName:(NSString*)parserTagName childParsers:(NSMutableDictionary *)parsers;
